@@ -1,28 +1,14 @@
-import sounddevice as sd           # 实时音频采集
-import numpy as np                 # 科学计算与FFT
-import colorsys                    # HSV转RGB
-import socket                      # UDP通信
-import time                        # 主循环休眠控制
-from tkinter import messagebox      # 界面弹窗（保留，但后面用托盘替代）
-import threading                   # 线程支持（为托盘和主线程分离）
-import pystray                     # 托盘功能库
-import functools
-from pystray import MenuItem as item
-from PIL import Image, ImageDraw   # 托盘图标支持
-import sys;import os
-import webbrowser
+import sounddevice as sd
+import numpy as np
+import colorsys
+import socket
+import time
+
 
 ESP32_IP = '192.168.137.50'        # ESP32的IP地址，根据实际情况填写
 ESP32_PORT = 8888                  # ESP32监听UDP端口
 SAMPLERATE = 44100                 # 音频采样率，标准44.1kHz
 WINDOW_SIZE = 512                  # 每帧采样窗口
-
-# 访问目标资源，使得能在打包后还能获取
-def get_resource_path(relpath):
-    # relpath 例如: 'resource/xxx.png'
-    if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, relpath)
-    return os.path.join(os.path.dirname(__file__), relpath)  # 纯源码情况
 
 def find_audio_input_device():
     """
@@ -213,79 +199,3 @@ class MusicColorVisualizerNoGUI_UDP:
             except Exception:
                 pass
             self.udp.close()
-
-# ==== 托盘部分 新增 ====
-def create_color_icon():
-    im = Image.open(get_resource_path("resource\ICON_running.png"))
-    im = im.resize((64, 64))
-    return im
-def create_paused_icon():
-    im = Image.open(get_resource_path("resource\ICON_paused.png"))
-    im = im.resize((64, 64))
-    return im
-
-class TrayApp:
-    def __init__(self, main_app):
-        self.main_app = main_app
-        self.icon = pystray.Icon("MusicLight")
-        self.icon.icon = create_color_icon()
-        self.icon.title = "节奏灯运行中"
-        self.icon.menu = self.build_menu()
-
-    def build_menu(self):
-        return pystray.Menu(
-            item(lambda i: "⏸️  暂停" if not self.main_app.paused else "▶️   运行", self.toggle_pause),
-            item(
-                "🎶  风格选择",
-                pystray.Menu(
-                    item(
-                        "动态",
-                        functools.partial(self.set_style, "dynamic"),
-                        checked=lambda i: self.main_app.style == "dynamic"
-                    ),
-                    item(
-                        "全亮",
-                        functools.partial(self.set_style, "full_on"),
-                        checked=lambda i: self.main_app.style == "full_on"
-                    )
-                )
-            ),
-            item("ℹ️  关于", self.about),
-            item("📴  退出", self.on_exit)
-        )
-
-    def set_style(self, style, icon, item):
-        self.main_app.style = style
-        self.icon.menu = self.build_menu()
-
-    def toggle_pause(self, icon, item):
-        self.main_app.paused = not self.main_app.paused
-        self.icon.menu = self.build_menu()
-        if self.main_app.paused:
-            self.icon.icon = create_paused_icon()
-        else:
-            self.icon.icon = create_color_icon()
-    def about(self, icon=None, item=None):
-        webbrowser.open("http://139.196.234.229:1234")  # 这里换成你的实际URL
-
-
-    def on_exit(self, icon, item):
-        print("托盘退出事件，关闭主程序...")
-        self.main_app.running = False
-        icon.stop()
-
-    def run(self):
-        self.icon.run()
-if __name__ == '__main__':
-    # 保留原 messagebox 弹窗提示
-    try:
-        messagebox.showinfo("提示", "UDP节奏灯已在后台运行。")
-    except Exception as e:
-        print("弹窗异常:", e)
-    # === 用托盘方式管理主程序 ===
-    main_app = MusicColorVisualizerNoGUI_UDP()
-    t_audio = threading.Thread(target=main_app.start)
-    t_audio.daemon = True
-    t_audio.start()
-    tray = TrayApp(main_app)
-    tray.run()
