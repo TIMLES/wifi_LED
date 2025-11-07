@@ -245,6 +245,9 @@ void WiFiConnect::checkWiFiTaskFunc(void* param) {
     WiFiConnect* obj = WiFiConnect::instance_;
     bool lastConnected = (WiFi.status() == WL_CONNECTED);
 
+    uint32_t lastReconnectTime = 0;
+    const uint32_t reconnectInterval = 10*1000; // ms 重连周期
+
     while (true) {
         bool nowConnected = (WiFi.status() == WL_CONNECTED);
 
@@ -254,7 +257,9 @@ void WiFiConnect::checkWiFiTaskFunc(void* param) {
                 xTaskCreate(disconnect_tipTaskFunc, "WiFiTipTask", 4096, obj, 2,
                             &(obj->disconnect_wifiTipTask_));
                 Serial.println("[RTOS] 断网提示Task启动");
-            }
+            }}
+
+        if (!nowConnected &&(millis() - lastReconnectTime > reconnectInterval) && WiFi.softAPgetStationNum() == 0)  {
             // 投递重连消息，不再直接调用get/connect
             obj->prefs_.begin("wifi", true);
             String ssid = obj->prefs_.getString("ssid", "");
@@ -266,6 +271,7 @@ void WiFiConnect::checkWiFiTaskFunc(void* param) {
             msg.password = password;
             xQueueSend(obj->wifiQueue_, &msg, pdMS_TO_TICKS(100));
             Serial.println("[RTOS] WiFi断开，投递重连请求");
+            lastReconnectTime = millis();
         }
 
         // 2. 联网时，清除断网提示任务

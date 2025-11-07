@@ -106,7 +106,7 @@ void setup() {
   setColor(0,0,0,0);
 
   WiFi.config(local_IP, gateway, subnet);
-  wifiConn.connect();
+  // wifiConn.connect();
   wifiConn.startAutoReconnect(connect_Tips_wifi,disconnect_Tips_wifi,5000); 
 
 }
