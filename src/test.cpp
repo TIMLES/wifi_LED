@@ -3,16 +3,22 @@
 #include <Adafruit_NeoPixel.h>
 #include "WiFiConnect.h"
 
+// 创建全局对象（推荐放在setup之前）
+WiFiConnect wifiConn(
+    "WifiConnectMyDevice_ESP_AP", // AP热点名
+    "wJZagHy0xz9EISm"           // AP热点密码（实际请改强密码）
+);
+
 
 
 #define NEOPIXEL_PIN   44
 #define NUM_LEDS       8
 
-const char* ssid     = "RAY";
-const char* password = "12345678";
+
 IPAddress local_IP(192, 168, 137, 50);
 IPAddress gateway(192, 168, 137, 1);
 IPAddress subnet(255, 255, 255, 0);
+
 
 WiFiUDP udp;
 unsigned int udpPort = 8888;
@@ -61,11 +67,6 @@ void setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t val) {
 
 
 
-// 创建全局对象
-WiFiConnect wifiConn(
-    "WifiConnectMyDevice_ESP_AP", // AP热点名
-    "wJZagHy0xz9EISm"           // AP热点密码（实际请改强密码）
-);
 
 void Tips_wifi() {
   Serial.println("用户提示：WiFi已断开！");
@@ -73,9 +74,9 @@ void Tips_wifi() {
   // 断网时红色闪3次
   for (int i = 0; i < 3; i++) {
     setColor(255, 0, 0, 255);
-    delay(200);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
     setColor(0, 0, 0, 0);
-    delay(200);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
   }
 
 }
@@ -112,10 +113,11 @@ void loop() {
     }
   }
   if (millis() - lastUpdate > timeout) {
-    setColor(0, 0, 0,0);
+    // setColor(0, 0, 0,0);
     lastUpdate = millis();
   }}else {
-    // Serial.println("UDP不可用，等待WiFi连接...");
+    Serial.println("UDP不可用，等待WiFi连接...");
     setColor(0,0,0,0);
   }
+
 }
