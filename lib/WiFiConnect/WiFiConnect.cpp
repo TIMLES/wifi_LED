@@ -12,7 +12,7 @@ WiFiConnect::WiFiConnect(const char* apSsid, const char* apPassword, int apPort)
       wifiManagerTask_(NULL),
       DnsServiceTask_(NULL),
       checkWiFiTask_(NULL),
-      wifiTipTask_(NULL),
+      disconnect_wifiTipTask_(NULL),
       wifi_connect_result_(-1) 
 {
   if (instance_ != nullptr) {
@@ -66,8 +66,9 @@ bool WiFiConnect::isConnected() const { return WiFi.status() == WL_CONNECTED; }
 IPAddress WiFiConnect::getIP() const { return WiFi.localIP(); }
 
 // 启动断网检测，自动重连
-void WiFiConnect::startAutoReconnect(WiFiTipCallback cb, uint32_t tipInterval) {
-  tipCallback_ = cb;
+void WiFiConnect::startAutoReconnect(WiFiTipCallback connect,WiFiTipCallback disconnect,uint32_t tipInterval){
+  disconnect_tipCallback_ = disconnect;
+  connect_tipCallback_ = connect;
   tipInterval_ = tipInterval; // 保存到成员变量,提示间隔
   if (checkWiFiTask_ == NULL) {
     xTaskCreate(checkWiFiTaskFunc, "checkWiFiTaskFunc", 4096, NULL, 2,
@@ -89,9 +90,9 @@ void WiFiConnect::end() {
     vTaskDelete(wifiManagerTask_);
     wifiManagerTask_ = NULL;
   }
-  if (wifiTipTask_) {
-    vTaskDelete(wifiTipTask_);
-    wifiTipTask_ = NULL;
+  if (disconnect_wifiTipTask_) {
+    vTaskDelete(disconnect_wifiTipTask_);
+    disconnect_wifiTipTask_ = NULL;
   }
 
   server_.stop();
@@ -249,9 +250,9 @@ void WiFiConnect::checkWiFiTaskFunc(void* param) {
 
         // 1. 断网时，创建断网提示任务（只创建一次）
         if (lastConnected && !nowConnected) {
-            if (obj->wifiTipTask_ == NULL && obj->tipCallback_) {
-                xTaskCreate(tipTaskFunc, "WiFiTipTask", 4096, obj, 2,
-                            &(obj->wifiTipTask_));
+            if (obj->disconnect_wifiTipTask_ == NULL && obj->disconnect_tipCallback_) {
+                xTaskCreate(disconnect_tipTaskFunc, "WiFiTipTask", 4096, obj, 2,
+                            &(obj->disconnect_wifiTipTask_));
                 Serial.println("[RTOS] 断网提示Task启动");
             }
             // 投递重连消息，不再直接调用get/connect
@@ -268,10 +269,13 @@ void WiFiConnect::checkWiFiTaskFunc(void* param) {
         }
 
         // 2. 联网时，清除断网提示任务
-        if (!lastConnected && nowConnected && obj->wifiTipTask_ != NULL) {
-            vTaskDelete(obj->wifiTipTask_);
-            obj->wifiTipTask_ = NULL;
+        if (!lastConnected && nowConnected && obj->disconnect_wifiTipTask_ != NULL) {
+            vTaskDelete(obj->disconnect_wifiTipTask_);
+            obj->disconnect_wifiTipTask_ = NULL;
             Serial.println("[RTOS] WiFi恢复，断网提示Task销毁");
+            if (obj->connect_tipCallback_) {
+                obj->connect_tipCallback_(); // 直接调，不需要起任务
+            }
         }
 
         lastConnected = nowConnected;
@@ -280,11 +284,13 @@ void WiFiConnect::checkWiFiTaskFunc(void* param) {
 }
 
 //断网提示：
-void WiFiConnect::tipTaskFunc(void* param) {
+void WiFiConnect::disconnect_tipTaskFunc(void* param) {
     WiFiConnect* obj = (WiFiConnect*)param;
     while (WiFi.status() != WL_CONNECTED) {
-        if (obj->tipCallback_) obj->tipCallback_(); // 执行用户回调
+        if (obj->disconnect_tipCallback_) obj->disconnect_tipCallback_(); // 执行用户回调
         vTaskDelay(obj->tipInterval_ / portTICK_PERIOD_MS);
     }
-    vTaskDelete(NULL); // 联网后自动销毁
+    obj->disconnect_wifiTipTask_ = NULL;  // <---- 这句更健壮
+    vTaskDelete(NULL);
 }
+

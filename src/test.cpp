@@ -68,7 +68,7 @@ void setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t val) {
 
 
 
-void Tips_wifi() {
+void disconnect_Tips_wifi() {
   Serial.println("用户提示：WiFi已断开！");
 
   // 断网时红色闪3次
@@ -81,6 +81,19 @@ void Tips_wifi() {
 
 }
 
+// 联网提示
+void connect_Tips_wifi() {
+  Serial.println("用户提示：WiFi已断开！");
+
+  // 断网时绿灯闪3次
+  for (int i = 0; i < 3; i++) {
+    setColor(0, 255, 0, 255);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
+    setColor(0, 0, 0, 0);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
+  }
+
+}
 
 
 void setup() {
@@ -94,7 +107,7 @@ void setup() {
 
   WiFi.config(local_IP, gateway, subnet);
   wifiConn.connect();
-  wifiConn.startAutoReconnect(Tips_wifi, 5000); 
+  wifiConn.startAutoReconnect(connect_Tips_wifi,disconnect_Tips_wifi,5000); 
 
 }
 
@@ -110,7 +123,7 @@ void loop() {
     int len = udp.read(colors, 4);
     if (len == 4) {
       setColor(colors[0], colors[1], colors[2], colors[3]);
-      Serial.printf("RGB_UDP: %d,%d,%d\n", colors[0], colors[1], colors[2]);
+      // Serial.printf("RGB_UDP: %d,%d,%d\n", colors[0], colors[1], colors[2]);
       
       frameCount++;
       if (millis() - lastFpsTime >= 1000) {

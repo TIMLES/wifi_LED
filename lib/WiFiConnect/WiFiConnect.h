@@ -56,12 +56,15 @@ class WiFiConnect {
 
   /**
    * 启动断网自动重连功能。
-   * @param cb
-   * 断网提示回调函数指针（void类型，无参数），断网时会定时调用；可省略，省略则不提示。
+   * @param connect
+   * 断网提示回调函数指针（void类型，无参数），联网时仅仅会调用一次；可省略，省略则不提示。
+   * @param disconnect
+   * 断网提示回调函数指针（void类型，无参数），断网时会定时调用多次；可省略，省略则不提示。
    * @param tipInterval
    * 断网提示回调调用间隔（单位：毫秒），默认为1000ms（1秒），可根据实际需要设定。
    */
-  void startAutoReconnect(WiFiTipCallback cb = nullptr,
+  void startAutoReconnect(WiFiTipCallback connect = nullptr,
+                          WiFiTipCallback disconnect = nullptr,
                           uint32_t tipInterval = 1000);
 
   /**
@@ -96,7 +99,7 @@ class WiFiConnect {
   //断网检测线程
   static void checkWiFiTaskFunc(void* param);
   //断网提示
-  static void tipTaskFunc(void* param);  // 提示任务体
+  static void disconnect_tipTaskFunc(void* param);  // 提示任务
 
 
   // ============== AP——STA配置参数 ===============
@@ -114,12 +117,16 @@ class WiFiConnect {
   QueueHandle_t wifiQueue_;         // WiFi操作消息队列
   TaskHandle_t wifiManagerTask_;    // WiFi统一管理任务
   TaskHandle_t checkWiFiTask_;      // 断网检测任务
-  TaskHandle_t wifiTipTask_;        // 断网提示任务
+  TaskHandle_t disconnect_wifiTipTask_;        // 断网提示任务
+
   TaskHandle_t DnsServiceTask_;     // 正在执行DNS服务(仅AP模式)任务句柄
 
 
 
-  WiFiTipCallback tipCallback_ = nullptr;  // 用户自定义回调
+  WiFiTipCallback connect_tipCallback_ = nullptr;  // 用户自定义回调
+  WiFiTipCallback disconnect_tipCallback_ = nullptr;  // 用户自定义回调
+
+
   volatile int wifi_connect_result_;  // 连接结果：-1等待, 0失败, 1成功
 
   // ============== 静态指针：任务入口用 ================
