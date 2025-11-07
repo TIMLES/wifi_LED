@@ -8,7 +8,7 @@ import time
 ESP32_IP = '192.168.137.50'        # ESP32的IP地址，根据实际情况填写
 ESP32_PORT = 8888                  # ESP32监听UDP端口
 SAMPLERATE = 44100                 # 音频采样率，标准44.1kHz
-WINDOW_SIZE = 512                  # 每帧采样窗口
+WINDOW_SIZE = 735                  # 每帧采样窗口
 
 def find_audio_input_device():
     """
@@ -48,6 +48,11 @@ class MusicColorVisualizerNoGUI_UDP:
         self.paused = False        # 是否暂停发送
         self.style = "full_on"  # 或"default"/"full_on"
         self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)    # 创建UDP SOCKET
+
+
+        self.frame_count = 0       # 计帧数
+        self.last_fps_print = time.time()
+        self.fps = 0
 
     def send_rgb_udp(self, rgb):
         """
@@ -140,6 +145,16 @@ class MusicColorVisualizerNoGUI_UDP:
             rgb_disp = tuple(max(0, min(int(x * 255), 255)) for x in rgb)
             rgb_disp = rgb_disp + (int(val*255),)
             self.send_rgb_udp(rgb_disp)
+
+
+            self.frame_count += 1
+            now = time.time()
+            if now - self.last_fps_print >= 1.0:
+                self.fps = self.frame_count
+                print(f"当前FPS: {self.fps}")
+                self.frame_count = 0
+                self.last_fps_print = now
+
 
         except Exception as e:
             print("音频处理异常：", e)

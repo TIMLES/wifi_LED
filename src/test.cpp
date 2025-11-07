@@ -99,7 +99,8 @@ void setup() {
 }
 
 
-
+unsigned long lastFpsTime = 0;
+unsigned int frameCount = 0;
 void loop() {
 
     if (udpEnabled) {
@@ -110,14 +111,21 @@ void loop() {
     if (len == 4) {
       setColor(colors[0], colors[1], colors[2], colors[3]);
       Serial.printf("RGB_UDP: %d,%d,%d\n", colors[0], colors[1], colors[2]);
+      
+      frameCount++;
+      if (millis() - lastFpsTime >= 1000) {
+        Serial.printf("UDP接收帧率: %d FPS\n", frameCount);
+        frameCount = 0;
+        lastFpsTime = millis();
+        }
     }
   }
   if (millis() - lastUpdate > timeout) {
     // setColor(0, 0, 0,0);
     lastUpdate = millis();
   }}else {
-    Serial.println("UDP不可用，等待WiFi连接...");
-    setColor(0,0,0,0);
+    // Serial.println("UDP不可用，等待WiFi连接...");
+    // setColor(0,0,0,0);
   }
 
 }
