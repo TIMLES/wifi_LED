@@ -10,7 +10,6 @@ WiFiConnect wifiConn(
 );
 
 
-
 #define NEOPIXEL_PIN   44
 #define NUM_LEDS       8
 
@@ -106,7 +105,7 @@ void setup() {
   setColor(0,0,0,0);
 
   WiFi.config(local_IP, gateway, subnet);
-  wifiConn.connect();
+  // wifiConn.connect();
   wifiConn.startAutoReconnect(connect_Tips_wifi,disconnect_Tips_wifi,5000); 
 
 }
@@ -140,5 +139,31 @@ void loop() {
     // Serial.println("UDP不可用，等待WiFi连接...");
     // setColor(0,0,0,0);
   }
+
+}
+
+
+
+void loop() {
+
+    if (udpEnabled) {
+        int packetSize = udp.parsePacket();
+  if (packetSize == 3) {
+    uint8_t colors[3];
+    int len = udp.read(colors, 3);
+    if (len == 3) {
+      setColor(colors[0], colors[1], colors[2], colors[3]);
+      // Serial.printf("RGB_UDP: %d,%d,%d\n", colors[0], colors[1], colors[2]);
+      
+      frameCount++;
+      if (millis() - lastFpsTime >= 1000) {
+        Serial.printf("UDP接收帧率: %d FPS\n", frameCount);
+        frameCount = 0;
+        lastFpsTime = millis();
+        }
+    }
+  }
+
+    }
 
 }
