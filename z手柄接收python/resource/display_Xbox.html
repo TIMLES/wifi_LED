@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手柄数据可视化</title>
+    <!-- Tailwind CSS - 用于快速构建响应式UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome - 提供图标支持 -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- Tailwind 配置 - 自定义主题和扩展 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',    // 主色调：蓝色
+                        secondary: '#10B981',  // 次要色调：绿色
+                        accent: '#F59E0B',     // 强调色：橙色
+                        danger: '#EF4444',     // 危险色：红色
+                        dark: '#1E293B',       // 深色
+                        light: '#F8FAFC'       // 浅色
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']  // 无衬线字体
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',  // 慢脉冲动画
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- 自定义CSS样式 -->
+    <style type="text/tailwindcss">
+        @layer utilities {
+            /* 文本阴影效果 */
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            
+            /* 发光效果 */
+            .glow {
+                filter: drop-shadow(0 0 8px theme('colors.primary'));
+            }
+            
+            /* 绿色发光效果 */
+            .glow-green {
+                filter: drop-shadow(0 0 8px theme('colors.secondary'));
+            }
+            
+            /* 黄色发光效果 */
+            .glow-yellow {
+                filter: drop-shadow(0 0 8px theme('colors.accent'));
+            }
+            
+            /* 红色发光效果 */
+            .glow-red {
+                filter: drop-shadow(0 0 8px theme('colors.danger'));
+            }
+            
+            /* 变换过渡效果 */
+            .transition-transform {
+                transition-property: transform;
+                transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+                transition-duration: 150ms;
+            }
+            
+            /* 控制器阴影效果 */
+            .controller-shadow {
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            }
+        }
+        
+        /* 页面背景样式 */
+        body {
+            background-color: #0F172A;
+            background-image: 
+                radial-gradient(at 47% 33%, rgba(59, 130, 246, 0.15) 0, transparent 59%), 
+                radial-gradient(at 82% 65%, rgba(16, 185, 129, 0.15) 0, transparent 55%);
+            min-height: 100vh;
+        }
+        
+        /* 控制器容器样式 */
+        .controller-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 16/9;
+        }
+        
+        /* 控制器背景图片样式 */
+        .controller-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.3;
+            z-index: 1;
+        }
+        
+        /* 摇杆样式 */
+        .joystick {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: #2563EB;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease-out;
+            z-index: 10;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 摇杆圈样式 */
+        .joystick-ring {
+            position: absolute;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 2px solid rgba(59, 130, 246, 0.6);
+            transform: translate(-50%, -50%);
+            transition: border-color 0.2s ease;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        
+        /* 扳机键样式 */
+        .trigger {
+            position: absolute;
+            width: 22px;
+            background-color: #F59E0B;
+            border-radius: 4px;
+            transition: height 0.1s ease-out;
+            transform-origin: bottom center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            bottom: 0;
+        }
+        
+        /* 按钮样式 */
+        .button {
+            position: absolute;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            transition: all 0.1s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            opacity: 0.8;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Start和Back按钮样式 */
+        .button.start-back {
+            width: 35px;
+            height: 15px;
+            border-radius: 15px;
+            font-size: 9px;
+            text-transform: uppercase;
+        }
+        
+        /* 圆角矩形按钮样式 (LB, RB) */
+        .button.rounded-rect {
+            border-radius: 6px;
+            width: 45px;
+            height: 22px;
+            font-size: 12px;
+        }
+        
+        /* 按钮按下状态样式 */
+        .button.pressed {
+            transform: scale(0.9);
+            opacity: 1;
+            box-shadow: 0 0 15px theme('colors.primary');
+        }
+        
+        /* 方向键样式 */
+        .dpad {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            transition: all 0.1s ease-out;
+            opacity: 0.8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            background-color: rgba(16, 185, 129, 0.2);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* 方向键按下状态样式 */
+        .dpad.pressed {
+            opacity: 1;
+            transform: scale(1.1);
+            background-color: rgba(16, 185, 129, 0.4);
+            filter: drop-shadow(0 0 10px theme('colors.secondary'));
+        }
+        
+        /* 数据值样式 */
+        .data-value {
+            transition: all 0.2s ease;
+        }
+        
+        /* 连接状态样式 */
+        .connection-status {
+            transition: all 0.3s ease;
+        }
+        
+        /* 在线状态样式 */
+        .status-online {
+            background-color: theme('colors.secondary');
+        }
+        
+        /* 离线状态样式 */
+        .status-offline {
+            background-color: theme('colors.danger');
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        /* 脉冲动画 */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+        
+        /* 数据卡片样式 */
+        .data-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        /* 数据卡片悬停效果 */
+        .data-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3);
+        }
+        
+        /* 摇杆显示区域样式 */
+        .joystick-display {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            margin: 0 auto;
+        }
+        
+        /* 摇杆点样式 */
+        .joystick-dot {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background-color: theme('colors.primary');
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease-out;
+        }
+        
+        /* 扳机键显示条样式 */
+        .trigger-bar {
+            position: relative;
+            width: 20px;
+            height: 100px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+        
+        /* 扳机键填充条样式 */
+        .trigger-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background-color: theme('colors.accent');
+            transition: height 0.1s ease-out;
+        }
+    </style>
+</head>
+<body class="text-light">
+    <div class="container mx-auto px-4 py-8">
+        <!-- 头部区域 -->
+        <header class="mb-8">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-shadow">手柄数据可视化</h1>
+                    <p class="text-gray-400">实时展示手柄输入数据</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- 连接状态指示器 -->
+                    <div class="flex items-center">
+                        <span class="connection-status status-offline w-3 h-3 rounded-full mr-2"></span>
+                        <span id="connection-text" class="text-sm">未连接</span>
+                    </div>
+                    <!-- 连接/断开按钮 -->
+                    <button id="connect-btn" class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-all">
+                        <i class="fa fa-refresh mr-1"></i> 连接
+                    </button>
+                </div>
+            </div>
+        </header>
+        
+        <!-- 主要内容区域 -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 手柄可视化区域 -->
+            <div class="lg:col-span-2">
+                <div class="bg-dark rounded-xl p-6 controller-shadow">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">手柄可视化</h2>
+                        <div id="fps-display" class="bg-dark/70 text-primary px-3 py-1 rounded-full text-sm font-mono">
+                            0 FPS
+                        </div>
+                    </div>
+                    <div class="controller-container mx-auto">
+                        <!-- 手柄背景图片 -->
+                        <div class="controller-bg" style="background-image: url('https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/12c595c8e9334b199f8532a3e9ac8af0~tplv-a9rns2rl98-image.image?rcl=202511091541117F4ECE36422A5A3D2738&amp;rk3s=8e244e95&amp;rrcfp=f06b921b&amp;x-expires=1765266101&amp;x-signature=Zo%2B9QUSUYxGy9yr0207rBpis4Go%3D')"></div>
+                        
+                        <!-- 左摇杆 -->
+                        <div id="left-joystick-ring" class="joystick-ring" style="top: 50%; left: 35%;"></div>
+                        <div id="left-joystick" class="joystick" style="top: 50%; left: 35%;"></div>
+                        
+                        <!-- 右摇杆 -->
+                        <div id="right-joystick-ring" class="joystick-ring" style="top: 50%; left: 65%;"></div>
+                        <div id="right-joystick" class="joystick" style="top: 50%; left: 65%;"></div>
+                        
+                        <!-- 左扳机键 -->
+                        <div id="left-trigger" class="trigger" style="bottom: 15%; left: 6%; height: 0;"></div>
+                        
+                        <!-- 右扳机键 -->
+                        <div id="right-trigger" class="trigger" style="bottom: 15%; left: 94%; height: 0;"></div>
+                        
+                        <!-- 方向键 -->
+                        <div id="dpad-up" class="dpad" style="top: 48%; left: 20%;">
+                            <i class="fa fa-caret-up text-2xl text-secondary"></i>
+                        </div>
+                        <div id="dpad-down" class="dpad" style="top: 72%; left: 20%;">
+                            <i class="fa fa-caret-down text-2xl text-secondary"></i>
+                        </div>
+                        <div id="dpad-left" class="dpad" style="top: 60%; left: 12%;">
+                            <i class="fa fa-caret-left text-2xl text-secondary"></i>
+                        </div>
+                        <div id="dpad-right" class="dpad" style="top: 60%; left: 28%;">
+                            <i class="fa fa-caret-right text-2xl text-secondary"></i>
+                        </div>
+                        
+                        <!-- 按钮 -->
+                        <div id="btn-a" class="button bg-green-500" style="top: 72%; left: 78%;">A</div>
+                        <div id="btn-b" class="button bg-red-500" style="top: 62%; left: 85%;">B</div>
+                        <div id="btn-x" class="button bg-blue-500" style="top: 62%; left: 71%;">X</div>
+                        <div id="btn-y" class="button bg-yellow-500" style="top: 52%; left: 78%;">Y</div>
+                        <div id="btn-lb" class="button bg-gray-500 rounded-rect" style="top: 25%; left: 18%;">LB</div>
+                        <div id="btn-rb" class="button bg-gray-500 rounded-rect" style="top: 25%; left: 74%;">RB</div>
+                        <div id="btn-back" class="button bg-gray-600 start-back" style="top: 30%; left: 40%;">Back</div>
+                        <div id="btn-start" class="button bg-gray-600 start-back" style="top: 30%; left: 60%;">Start</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 数据显示区域 -->
+            <div class="lg:col-span-1">
+                <div class="grid grid-cols-1 gap-4">
+                    <!-- 摇杆数据 -->
+                    <div class="data-card rounded-xl p-4">
+                        <h3 class="text-lg font-semibold mb-3 text-center">摇杆数据</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- 左摇杆数据 -->
+                            <div>
+                                <h4 class="text-sm text-gray-400 mb-2">左摇杆</h4>
+                                <div class="joystick-display mb-2">
+                                    <div id="left-joystick-dot" class="joystick-dot"></div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-sm">
+                                    <div>
+                                        <span class="text-gray-400">LX:</span>
+                                        <span id="data-lx" class="data-value">0</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-400">LY:</span>
+                                        <span id="data-ly" class="data-value">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 右摇杆数据 -->
+                            <div>
+                                <h4 class="text-sm text-gray-400 mb-2">右摇杆</h4>
+                                <div class="joystick-display mb-2">
+                                    <div id="right-joystick-dot" class="joystick-dot"></div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-sm">
+                                    <div>
+                                        <span class="text-gray-400">RX:</span>
+                                        <span id="data-rx" class="data-value">0</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-400">RY:</span>
+                                        <span id="data-ry" class="data-value">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 扳机键数据 -->
+                    <div class="data-card rounded-xl p-4">
+                        <h3 class="text-lg font-semibold mb-3 text-center">扳机键数据</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- 左扳机键数据 -->
+                            <div>
+                                <h4 class="text-sm text-gray-400 mb-2">左扳机</h4>
+                                <div class="trigger-bar mb-2">
+                                    <div id="left-trigger-fill" class="trigger-fill" style="height: 0%"></div>
+                                </div>
+                                <div class="text-sm">
+                                    <span class="text-gray-400">LT:</span>
+                                    <span id="data-lt" class="data-value">0</span>
+                                </div>
+                            </div>
+                            
+                            <!-- 右扳机键数据 -->
+                            <div>
+                                <h4 class="text-sm text-gray-400 mb-2">右扳机</h4>
+                                <div class="trigger-bar mb-2">
+                                    <div id="right-trigger-fill" class="trigger-fill" style="height: 0%"></div>
+                                </div>
+                                <div class="text-sm">
+                                    <span class="text-gray-400">RT:</span>
+                                    <span id="data-rt" class="data-value">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 按钮状态 -->
+                    <div class="data-card rounded-xl p-4">
+                        <h3 class="text-lg font-semibold mb-3 text-center">按钮状态</h3>
+                        <!-- A、B、X、Y 键一排 -->
+                        <div class="flex justify-around mb-3">
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-green-500 mr-2" id="status-a"></span>
+                                <span>A 键</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-red-500 mr-2" id="status-b"></span>
+                                <span>B 键</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-blue-500 mr-2" id="status-x"></span>
+                                <span>X 键</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-yellow-500 mr-2" id="status-y"></span>
+                                <span>Y 键</span>
+                            </div>
+                        </div>
+                        
+                        <!-- LB、RB 键一排 -->
+                        <div class="flex justify-around">
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-gray-500 mr-2" id="status-lb"></span>
+                                <span>LB 键</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-gray-500 mr-2" id="status-rb"></span>
+                                <span>RB 键</span>
+                            </div>
+                        </div>
+                        
+                        <h4 class="text-sm text-gray-400 mt-4 mb-2" style="text-decoration: underline;">方向键</h4>
+                        <div class="flex justify-center items-center w-full">  <!-- 居中最外层 -->
+                            <div class="relative w-24 h-24">
+                                <!-- 上 -->
+                                <div class="absolute left-1/2 transform -translate-x-1/2 top-0 flex flex-col items-center">
+                                    <span class="w-4 h-2 rounded-full bg-secondary mb-1 block" id="status-dpad-up"></span>
+                                    <span class="text-xs">上</span>
+                                </div>
+                                <!-- 下 -->
+                                <div class="absolute left-1/2 transform -translate-x-1/2 bottom-0 flex flex-col items-center">
+                                    <span class="w-4 h-2 rounded-full bg-secondary mb-1 block" id="status-dpad-down"></span>
+                                    <span class="text-xs">下</span>
+                                </div>
+                                <!-- 左 -->
+                                <div class="absolute top-1/2 left-0 transform -translate-y-1/2 flex flex-col items-center">
+                                    <span class="w-4 h-2 rounded-full bg-secondary mb-1 block" id="status-dpad-left"></span>
+                                    <span class="text-xs">左</span>
+                                </div>
+                                <!-- 右 -->
+                                <div class="absolute top-1/2 right-0 transform -translate-y-1/2 flex flex-col items-center">
+                                    <span class="w-4 h-2 rounded-full bg-secondary mb-1 block" id="status-dpad-right"></span>
+                                    <span class="text-xs">右</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- 底部区域 -->
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>手柄数据可视化 © 2025</p>
+            <p class="mt-1">通过 WebSocket 连接到服务器接收手柄数据</p>
+        </footer>
+    </div>
+
+    <script>
+        // 全局变量
+        let ws;                  // WebSocket连接对象
+        let isConnected = false; // 连接状态标志
+        
+        // DOM元素引用
+        const connectionStatus = document.querySelector('.connection-status');
+        const connectionText = document.getElementById('connection-text');
+        const connectBtn = document.getElementById('connect-btn');
+        
+        // 摇杆元素
+        const leftJoystick = document.getElementById('left-joystick');
+        const rightJoystick = document.getElementById('right-joystick');
+        const leftJoystickDot = document.getElementById('left-joystick-dot');
+        const rightJoystickDot = document.getElementById('right-joystick-dot');
+        
+        // 扳机键元素
+        const leftTrigger = document.getElementById('left-trigger');
+        const rightTrigger = document.getElementById('right-trigger');
+        const leftTriggerFill = document.getElementById('left-trigger-fill');
+        const rightTriggerFill = document.getElementById('right-trigger-fill');
+        
+        // 按钮元素
+        const buttons = {
+            a: document.getElementById('btn-a'),
+            b: document.getElementById('btn-b'),
+            x: document.getElementById('btn-x'),
+            y: document.getElementById('btn-y'),
+            lb: document.getElementById('btn-lb'),
+            rb: document.getElementById('btn-rb'),
+            back: document.getElementById('btn-back'),
+            start: document.getElementById('btn-start')
+        };
+        
+        // 方向键元素
+        const dpad = {
+            up: document.getElementById('dpad-up'),
+            down: document.getElementById('dpad-down'),
+            left: document.getElementById('dpad-left'),
+            right: document.getElementById('dpad-right')
+        };
+        
+        // 数据显示元素
+        const dataElements = {
+            lx: document.getElementById('data-lx'),
+            ly: document.getElementById('data-ly'),
+            rx: document.getElementById('data-rx'),
+            ry: document.getElementById('data-ry'),
+            lt: document.getElementById('data-lt'),
+            rt: document.getElementById('data-rt')
+        };
+        
+        // 按钮状态指示元素
+        const buttonStatus = {
+            a: document.getElementById('status-a'),
+            b: document.getElementById('status-b'),
+            x: document.getElementById('status-x'),
+            y: document.getElementById('status-y'),
+            lb: document.getElementById('status-lb'),
+            rb: document.getElementById('status-rb'),
+            back: document.getElementById('status-back'),
+            start: document.getElementById('status-start'),
+            dpad_up: document.getElementById('status-dpad-up'),
+            dpad_down: document.getElementById('status-dpad-down'),
+            dpad_left: document.getElementById('status-dpad-left'),
+            dpad_right: document.getElementById('status-dpad-right')
+        };
+        
+        /**
+         * 连接到WebSocket服务器
+         * 建立与本地WebSocket服务器的连接，处理连接、消息、关闭和错误事件
+         */
+        function connect() {
+            // 如果已有连接，先关闭
+            if (ws) {
+                ws.close();
+            }
+            
+            try {
+                // 创建新的WebSocket连接
+                ws = new WebSocket('ws://localhost:5678');
+                
+                // 连接成功回调
+                ws.onopen = function() {
+                    console.log('已连接到WebSocket服务器');
+                    isConnected = true;
+                    updateConnectionStatus(true);
+                };
+                
+                // 接收消息回调
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateGamepadVisualization(data);
+                    } catch (error) {
+                        console.error('解析手柄数据时出错:', error, '接收到的数据:', event.data);
+                    }
+                };
+                
+                // 连接关闭回调
+                ws.onclose = function() {
+                    console.log('已从WebSocket服务器断开连接');
+                    isConnected = false;
+                    updateConnectionStatus(false);
+                    
+                    // 重置FPS显示
+                    const fpsDisplay = document.getElementById('fps-display');
+                    if (fpsDisplay) {
+                        fpsDisplay.textContent = '0 FPS';
+                        fpsDisplay.classList.remove('text-green', 'text-yellow', 'text-red');
+                        fpsDisplay.classList.add('text-primary');
+                    }
+                    
+                    // 3秒后尝试重新连接
+                    setTimeout(connect, 3000);
+                };
+                
+                // 连接错误回调
+                ws.onerror = function(error) {
+                    console.error('WebSocket错误:', error);
+                    isConnected = false;
+                    updateConnectionStatus(false);
+                };
+            } catch (error) {
+                console.error('连接到WebSocket时出错:', error);
+                isConnected = false;
+                updateConnectionStatus(false);
+            }
+        }
+        
+        /**
+         * 更新连接状态UI
+         * @param {boolean} connected - 连接状态（true为已连接，false为未连接）
+         */
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                connectionStatus.classList.remove('status-offline');
+                connectionStatus.classList.add('status-online');
+                connectionText.textContent = '已连接';
+                connectBtn.innerHTML = '<i class="fa fa-refresh mr-1"></i> 断开';
+            } else {
+                connectionStatus.classList.remove('status-online');
+                connectionStatus.classList.add('status-offline');
+                connectionText.textContent = '未连接';
+                connectBtn.innerHTML = '<i class="fa fa-refresh mr-1"></i> 连接';
+            }
+        }
+        
+        // FPS相关变量
+        let frameCount = 0;
+        let fps = 0;
+        let lastFpsUpdate = Date.now();
+        
+        /**
+         * 根据手柄数据更新可视化
+         * @param {Object} data - 手柄数据对象
+         */
+        function updateGamepadVisualization(data) {
+            // 处理错误情况
+            if (data.error) {
+                console.error('手柄数据中的错误:', data.error);
+                return;
+            }
+            
+            // 更新帧率计数
+            frameCount++;
+            
+            // 更新摇杆位置
+            updateJoystick(leftJoystick, data.lx, data.ly, 35, 50);
+            updateJoystick(rightJoystick, data.rx, data.ry, 65, 50);
+            
+            // 更新数据显示区域中的摇杆点
+            updateJoystickDot(leftJoystickDot, data.lx, data.ly);
+            updateJoystickDot(rightJoystickDot, data.rx, data.ry);
+            
+            // 更新扳机键
+            updateTrigger(leftTrigger, leftTriggerFill, data.lt);
+            updateTrigger(rightTrigger, rightTriggerFill, data.rt);
+            
+            // 更新按钮状态
+            updateButton(buttons.a, data.btn_a);
+            updateButton(buttons.b, data.btn_b);
+            updateButton(buttons.x, data.btn_x);
+            updateButton(buttons.y, data.btn_y);
+            updateButton(buttons.lb, data.btn_lb);
+            updateButton(buttons.rb, data.btn_rb);
+          
+            // updateButton(buttons.back, data.btn_back || 0);
+            // updateButton(buttons.start, data.btn_start || 0);
+            
+            // 更新方向键状态
+            updateButton(dpad.up, data.dpad_up);
+            updateButton(dpad.down, data.dpad_down);
+            updateButton(dpad.left, data.dpad_left);
+            updateButton(dpad.right, data.dpad_right);
+            
+            // 更新数据显示
+            updateDataDisplay(data);
+            
+            // 更新按钮状态指示器
+            updateButtonStatus(buttonStatus.a, data.btn_a);
+            updateButtonStatus(buttonStatus.b, data.btn_b);
+            updateButtonStatus(buttonStatus.x, data.btn_x);
+            updateButtonStatus(buttonStatus.y, data.btn_y);
+            updateButtonStatus(buttonStatus.lb, data.btn_lb);
+            updateButtonStatus(buttonStatus.rb, data.btn_rb);
+          
+            // updateButtonStatus(buttonStatus.back, data.btn_back || 0);
+            // updateButtonStatus(buttonStatus.start, data.btn_start || 0);
+            updateButtonStatus(buttonStatus.dpad_up, data.dpad_up);
+            updateButtonStatus(buttonStatus.dpad_down, data.dpad_down);
+            updateButtonStatus(buttonStatus.dpad_left, data.dpad_left);
+            updateButtonStatus(buttonStatus.dpad_right, data.dpad_right);
+        }
+        
+        /**
+         * 更新摇杆位置和颜色
+         * @param {HTMLElement} element - 摇杆元素
+         * @param {number} x - X轴值 (0-255)
+         * @param {number} y - Y轴值 (0-255)
+         * @param {number} centerX - 中心点X坐标百分比
+         * @param {number} centerY - 中心点Y坐标百分比
+         */
+        function updateJoystick(element, x, y, centerX, centerY) {
+            // 归一化到 [-1, 1]
+            const normalizedX = (x / 127.5) - 1;
+            const normalizedY = (y / 127.5) - 1;
+        
+            // 获取父容器宽高
+            const container = element.parentElement;
+            const rect = container.getBoundingClientRect();
+        
+            // 圆最大半径（Px）
+            const radiusPx = Math.min(rect.width, rect.height) / 2 * 0.3;
+        
+            // 把像素最大偏移转百分比
+            const radiusXPercent = (radiusPx / rect.width) * 100;
+            const radiusYPercent = (radiusPx / rect.height) * 100;
+        
+            // 轨迹偏移（用圆半径百分比）
+            const moveXPercent = normalizedX * radiusXPercent;
+            const moveYPercent = -normalizedY * radiusYPercent; // Y轴方向通常向下为正
+        
+            // 定位（百分比）
+            element.style.left = `${centerX + moveXPercent}%`;
+            element.style.top = `${centerY + moveYPercent}%`;
+        
+            // 颜色
+            const distance = Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+            const intensity = Math.min(1, distance);
+            const r = Math.floor(59 * (1 - intensity) + 239 * intensity);
+            const g = Math.floor(130 * (1 - intensity) + 69 * intensity);
+            const b = Math.floor(246 * (1 - intensity) + 20 * intensity);
+        
+            element.style.backgroundColor = `rgb(${r},${g},${b})`;
+        }
+        
+        /**
+         * 更新数据显示区域中的摇杆点位置
+         * @param {HTMLElement} element - 摇杆点元素
+         * @param {number} x - X轴值 (0-255)
+         * @param {number} y - Y轴值 (0-255)
+         */
+        function updateJoystickDot(element, x, y) {
+            // 将0-255范围转换为0-100%
+            const normalizedX = x / 255;
+            const normalizedY = -y / 255+1;
+            
+            // 更新位置
+            element.style.left = `${normalizedX * 100}%`;
+            element.style.top = `${normalizedY * 100}%`;
+        }
+        
+        /**
+         * 更新扳机键位置和颜色
+         * @param {HTMLElement} element - 扳机键元素
+         * @param {HTMLElement} fillElement - 扳机键填充元素
+         * @param {number} value - 扳机键值 (0-255)
+         */
+        function updateTrigger(element, fillElement, value) {
+            // 将0-255范围转换为0-100%
+            const percentage = (value / 255) * 100;
+            
+            // 更新高度
+            element.style.height = `${percentage/1.5}%`;
+            fillElement.style.height = `${percentage}%`;
+            
+            // 根据值改变颜色
+            const r = Math.floor(245 * (1 - percentage/100) + 239 * (percentage/100));
+            const g = Math.floor(158 * (1 - percentage/100) + 69 * (percentage/100));
+            const b = Math.floor(11 * (1 - percentage/100) + 20 * (percentage/100));
+            
+            // 更新颜色
+            element.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            fillElement.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        }
+        
+        /**
+         * 更新按钮状态
+         * @param {HTMLElement} element - 按钮元素
+         * @param {number} pressed - 按压状态 (0或1)
+         */
+        function updateButton(element, pressed) {
+            if (pressed > 0) {
+                element.classList.add('pressed');
+            } else {
+                element.classList.remove('pressed');
+            }
+        }
+        
+        /**
+         * 更新数据显示
+         * @param {Object} data - 手柄数据对象
+         */
+        function updateDataDisplay(data) {
+            dataElements.lx.textContent = data.lx;
+            dataElements.ly.textContent = data.ly;
+            dataElements.rx.textContent = data.rx;
+            dataElements.ry.textContent = data.ry;
+            dataElements.lt.textContent = data.lt;
+            dataElements.rt.textContent = data.rt;
+            
+            // 高亮显示变化的值
+            highlightChangedValue(dataElements.lx, data.lx);
+            highlightChangedValue(dataElements.ly, data.ly);
+            highlightChangedValue(dataElements.rx, data.rx);
+            highlightChangedValue(dataElements.ry, data.ry);
+            highlightChangedValue(dataElements.lt, data.lt);
+            highlightChangedValue(dataElements.rt, data.rt);
+        }
+        
+        /**
+         * 高亮显示变化的值
+         * @param {HTMLElement} element - 显示元素
+         * @param {number} value - 新值
+         */
+        function highlightChangedValue(element, value) {
+            // 存储之前的值
+            const prevValue = element.dataset.prevValue || 0;
+            
+            // 如果值发生变化，添加高亮类
+            if (value !== prevValue) {
+                element.classList.add('text-primary');
+                setTimeout(() => {
+                    element.classList.remove('text-primary');
+                }, 200);
+            }
+            
+            // 更新之前的值
+            element.dataset.prevValue = value;
+        }
+        
+        /**
+         * 更新按钮状态指示器
+         * @param {HTMLElement} element - 状态指示器元素
+         * @param {number} pressed - 按压状态 (0或1)
+         */
+        function updateButtonStatus(element, pressed) {
+            if (pressed > 0) {
+                element.classList.add('glow');
+                element.style.opacity = '1';
+            } else {
+                element.classList.remove('glow');
+                element.style.opacity = '0.3';
+            }
+        }
+        
+        /**
+         * 连接按钮点击事件处理
+         */
+        connectBtn.addEventListener('click', function() {
+            if (isConnected) {
+                ws.close();
+            } else {
+                connect();
+            }
+        });
+        
+        /**
+         * 更新FPS显示
+         */
+        function updateFpsDisplay() {
+            const now = Date.now();
+            const elapsed = (now - lastFpsUpdate) / 1000; // 转换为秒
+            
+            if (elapsed > 0) {
+                fps = Math.round(frameCount / elapsed);
+                frameCount = 0;
+                lastFpsUpdate = now;
+                
+                // 获取FPS显示元素
+                const fpsDisplay = document.getElementById('fps-display');
+                if (fpsDisplay) {
+                    // 更新FPS显示文本
+                    fpsDisplay.textContent = `${fps} FPS`;
+                    
+                    // 根据FPS值改变颜色
+                    if (fps > 30) {
+                        fpsDisplay.classList.remove('text-yellow', 'text-red');
+                        fpsDisplay.classList.add('text-green');
+                    } else if (fps >= 10) {
+                        fpsDisplay.classList.remove('text-green', 'text-red');
+                        fpsDisplay.classList.add('text-yellow');
+                    } else {
+                        fpsDisplay.classList.remove('text-green', 'text-yellow');
+                        fpsDisplay.classList.add('text-red');
+                    }
+                }
+            }
+        }
+        
+        /**
+         * 页面加载完成初始化
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            // 页面加载时尝试连接
+            connect();
+            
+            // 设置FPS更新定时器
+            setInterval(updateFpsDisplay, 1000);
+        });
+    </script>
+</body>
+</html>

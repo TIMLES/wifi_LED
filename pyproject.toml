@@ -10,4 +10,5 @@ dependencies = [
     "pyserial>=3.5",
     "pystray>=0.19.5",
     "sounddevice>=0.5.2",
+    "websockets>=15.0.1",
 ]

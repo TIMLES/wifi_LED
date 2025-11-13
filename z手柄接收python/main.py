@@ -1,49 +1,42 @@
-import pygame
-import socket
+# main.py
+from tkinter import messagebox      # 界面弹窗（保留，但后面用托盘替代）
+import threading
+from tray import TrayApp
+from joystick_sender import JoystickUDPController
+import pystray
 import time
+from ws_udp_server import run_ws_udp_server  # 导入你的封装函数
+# main.py
+if __name__ == '__main__':
+    ESP_ADDRESSES = [
+        ('192.168.137.51', 4210),
+        ('127.0.0.1', 4210),      # 再加一个，举例
+    ]
+    FPS = 60
+    try:
+        messagebox.showinfo("提示", "手柄程序已在后台运行。")
+    except Exception as e:
+        print("弹窗异常:", e)
+    print("[main] 初始化 JoystickUDPController")
+    main_app = JoystickUDPController(ESP_ADDRESSES, FPS)
+    t_worker = threading.Thread(target=main_app.start)
+    t_worker.daemon = True
+    print("[main] 启动 worker 线程")
+    t_worker.start()
 
-# ESP8266/ESP32 的IP和端口（注意IP和硬件实际一致）
-ESP_IP = '192.168.137.198'
-ESP_PORT = 4210
+    # 启动后端服务（建议加停止控制）
+    backend_stop_event = threading.Event()
+    t_backend = threading.Thread(target=run_ws_udp_server, args=(backend_stop_event,), daemon=True)
+    print("[main] 启动后端服务线程")
+    t_backend.start()
 
-# 准备UDP通信
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    print("[main] 初始化 TrayApp")
+    tray = TrayApp(main_app)
 
-# 初始化pygame和手柄
-pygame.init()
-pygame.joystick.init()
-
-count = pygame.joystick.get_count()
-if count == 0:
-    print("未检测到手柄，请插入 Xbox 手柄或重试。")
-    exit(1)
-
-# 支持多手柄，第一个为主
-j = pygame.joystick.Joystick(0)
-j.init()
-print(f"已连接手柄: {j.get_name()}")
-
-clock = pygame.time.Clock()
-FPS = 30    # 期望帧率（每秒发送 60 次）
-last_x, last_y = None, None
-try:
-    while True:
-        pygame.event.pump()
-        # 读取左摇杆
-        x = int(-j.get_axis(0) * 5+5)
-        y = int(-j.get_axis(1) * 5+5)
-        if 1:
-            print(f"发送指令：x={x}, y={y}")
-            last_x, last_y = x, y
-            
-        msg = f"{x},{y}".encode()
-        sock.sendto(msg, (ESP_IP, ESP_PORT))
-        # 控制循环速率
-        clock.tick(FPS)   # 保证每秒循环 FPS 次（恒定帧率）
-        
-except KeyboardInterrupt:
-    print("程序已退出。")
-finally:
-    pygame.joystick.quit()
-    pygame.quit()
-    sock.close()
+    # 如果需要退出时关掉后端服务
+    try:
+        tray.run()
+    finally:
+        print("[main] TrayApp 退出，准备关闭后端服务")
+        backend_stop_event.set()
+        t_backend.join(timeout=5)
