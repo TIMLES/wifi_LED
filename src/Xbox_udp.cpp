@@ -15,6 +15,7 @@ WiFiConnect wifiConn(
 IPAddress local_IP(192, 168, 137, 51);
 IPAddress gateway(192, 168, 137, 1);
 IPAddress subnet(255, 255, 255, 0);
+
 WiFiUDP udp;
 unsigned int udpPort = 4210;
 bool udpEnabled = false;
@@ -26,10 +27,15 @@ struct ControllerData {
   int btn_a, btn_b, btn_x, btn_y;
   int btn_lb, btn_rb;
 };
-
 ControllerData g_controllerData;
+
 SemaphoreHandle_t xDataMutex;    // 控制数据同步互斥
 SemaphoreHandle_t xNewDataEvent; // 新数据到达信号量
+SemaphoreHandle_t xUdpMutex;     // UDP互斥量
+
+IPAddress lastRemoteIP;
+unsigned int lastRemotePort;
+unsigned int lastSendFps = 0;    // FPS统计
 
 void onWiFiEvent(WiFiEvent_t event) {
   switch (event) {
@@ -52,18 +58,23 @@ void onWiFiEvent(WiFiEvent_t event) {
   }
 }
 
+// UDP接收任务
 void UDPReceiveTask(void* pvParameters) {
   uint8_t msg[16];
-  ControllerData lastData = {0};  // 初始化全为0
+  ControllerData lastData = {0};
   unsigned long lastFpsTime = millis();
   unsigned int frameCount = 0;
-
   while (1) {
     if (udpEnabled) {
+      xSemaphoreTake(xUdpMutex, portMAX_DELAY);  // 收包加锁
       int packetSize = udp.parsePacket();
       if (packetSize == 16) {
         int len = udp.read(msg, 16);
         if (len == 16) {
+          // 记住发送方的IP/端口【重点】
+          lastRemoteIP = udp.remoteIP();
+          lastRemotePort = udp.remotePort();
+
           // 解析数据
           ControllerData data;
           data.lx = msg[0]; data.ly = msg[1];
@@ -71,33 +82,29 @@ void UDPReceiveTask(void* pvParameters) {
           data.lt = msg[4]; data.rt = msg[5];
           data.dpad_up    = msg[6];
           data.dpad_down  = msg[7];
-          data.dpad_left  = msg[8];
-          data.dpad_right = msg[9];
+          data.dpad_left  = msg[8]; data.dpad_right = msg[9];
           data.btn_a = msg[10]; data.btn_b = msg[11];
           data.btn_x = msg[12]; data.btn_y = msg[13];
           data.btn_lb = msg[14]; data.btn_rb = msg[15];
-
-          // 比较前后数据是否有变化
+          // 比较前后数据
           bool changed = memcmp(&lastData, &data, sizeof(ControllerData)) != 0;
           if (changed) {
-            // 数据有变化，写入并通知
             xSemaphoreTake(xDataMutex, portMAX_DELAY);
             g_controllerData = data;
             xSemaphoreGive(xDataMutex);
-
             xSemaphoreGive(xNewDataEvent);
-
-            // 更新lastData
             lastData = data;
           }
-
           frameCount++;
           if (millis() - lastFpsTime >= 1000) {
             Serial.printf("UDP接收帧率: %d FPS [TASK]\n", frameCount);
+            // 更新统计FPS（供发送任务用）
+            xSemaphoreTake(xDataMutex, portMAX_DELAY);
+            lastSendFps = frameCount;
+            xSemaphoreGive(xDataMutex);
+
             frameCount = 0;
             lastFpsTime = millis();
-
-                // TODO: 输出当前内存占用百分比
             uint32_t freeHeap = ESP.getFreeHeap();
             uint32_t totalHeap = ESP.getHeapSize();
             float usage = (totalHeap - freeHeap) * 100.0f / totalHeap;
@@ -105,11 +112,46 @@ void UDPReceiveTask(void* pvParameters) {
           }
         }
       }
+      xSemaphoreGive(xUdpMutex); // 收包解锁
     }
-    vTaskDelay(1/portTICK_PERIOD_MS); // 轻微让出CPU
+    vTaskDelay(1/portTICK_PERIOD_MS);
   }
 }
 
+// 新增FPS发送任务
+void UDPSendFpsTask(void* pvParameters) {
+  IPAddress prevIP;
+  unsigned int prevPort = 0;
+  while (1) {
+    // 取最新FPS数据和目标IP、端口
+    unsigned int fpsCopy = 0;
+    IPAddress remoteIP;
+    unsigned int remotePort;
+
+    // 保护全局数据读取
+    xSemaphoreTake(xDataMutex, portMAX_DELAY);
+    fpsCopy = lastSendFps;
+    xSemaphoreGive(xDataMutex);
+
+    remoteIP = lastRemoteIP;
+    remotePort = lastRemotePort;
+
+    // 如果 remoteIP 有效（兼容首次未收到包场景）
+    if (remotePort != 0) {
+      // 构造内容
+      char buf[32];
+      snprintf(buf, sizeof(buf), "ESP_FPS:%u", fpsCopy);
+
+      xSemaphoreTake(xUdpMutex, portMAX_DELAY);
+      udp.beginPacket(remoteIP, remotePort);  // 目标用电脑实际IP和端口
+      udp.write((uint8_t*)buf, strlen(buf));
+      udp.endPacket();
+      xSemaphoreGive(xUdpMutex);
+    }
+
+    vTaskDelay(1000/portTICK_PERIOD_MS); // 每秒发一次
+  }
+} 
 
 void setup() {
   Serial.begin(115200);
@@ -118,11 +160,10 @@ void setup() {
   wifiConn.connect();
   wifiConn.startAutoReconnect();
 
-  // 创建同步机制
   xDataMutex = xSemaphoreCreateMutex();
   xNewDataEvent = xSemaphoreCreateBinary();
+  xUdpMutex = xSemaphoreCreateMutex();
 
-  // 启动UDP接收任务
   xTaskCreatePinnedToCore(
     UDPReceiveTask,
     "UDPRecvTask",
@@ -130,23 +171,26 @@ void setup() {
     NULL,
     1,
     NULL,
-    1 // 用core 1
+    1
+  );
+  xTaskCreatePinnedToCore(
+    UDPSendFpsTask,
+    "UDPSendFpsTask",
+    2048,
+    NULL,
+    1,
+    NULL,
+    1
   );
 }
 
 void loop() {
-  // 阻塞等待新数据到来
   if (xSemaphoreTake(xNewDataEvent, 50 / portTICK_PERIOD_MS) == pdTRUE) {
-    // 获取数据并操作（如刷新显示、控制等）
     xSemaphoreTake(xDataMutex, portMAX_DELAY);
-    ControllerData data = g_controllerData; // 本地快照
+    ControllerData data = g_controllerData;
     xSemaphoreGive(xDataMutex);
-
-    // 示例：串口输出所有
     Serial.printf("LX:%d LY:%d RX:%d RY:%d BTN_A:%d\n",
       data.lx, data.ly, data.rx, data.ry, data.btn_a);
-
-
   }
   // 其它loop循环动作...
 }

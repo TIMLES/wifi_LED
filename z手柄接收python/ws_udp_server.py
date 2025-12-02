@@ -15,13 +15,30 @@ async def ws_handler(websocket):
     finally:
         clients.remove(websocket)
 
+# 数据包解析，不同类型分辨
 def parse_packet(data):
-    if len(data) < 16:
-        return {"error": "包长度不足"}
-    fields = ['lx','ly','rx','ry','lt','rt','dpad_up','dpad_down','dpad_left','dpad_right',
-              'btn_a','btn_b','btn_x','btn_y','btn_lb','btn_rb']
-    vals = list(data[:16])
-    return dict(zip(fields, vals))
+        # 长度为16，判定为手柄
+    if len(data) == 16:
+        fields = [
+            'lx','ly','rx','ry','lt','rt','dpad_up','dpad_down','dpad_left','dpad_right',
+            'btn_a','btn_b','btn_x','btn_y','btn_lb','btn_rb'
+        ]
+        vals = list(data)
+        return dict(zip(fields, vals))
+    try:
+        # 尝试按utf-8解码，属于状态字符串
+        text = data.decode('utf-8', errors='ignore').strip()
+        if text.startswith("ESP_FPS:"):
+            fps_val = text.split(":",1)[-1]
+            try: fps_val = int(fps_val)
+            except: pass
+            return {"type": "esp_status", "fps": fps_val}
+        # 可扩展其它协议，如 ESP_STATUS:xxx
+        # elif text.startswith("ESP_STATUS:"):
+        #    ...
+        return {"type": "unknown", "raw": text}
+    except Exception as e:
+        return {"type": "unknown", "error": str(e), "raw": repr(data)}
 
 async def broadcast(msg):
     if not clients: return
